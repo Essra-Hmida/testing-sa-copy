@@ -27,8 +27,9 @@ pipeline {
         stage('Setup Minikube Docker Env') {
             steps {
                 echo "⚙️ Configuration Docker Minikube"
-                // On charge les variables Docker pour Minikube via PowerShell
-                bat 'powershell -Command "minikube docker-env --shell powershell | Invoke-Expression"'
+                // On génère le fichier de configuration .bat et on le "call"
+                bat 'minikube docker-env --shell cmd > minikube_env.bat'
+                bat 'call minikube_env.bat'
             }
         }
 
