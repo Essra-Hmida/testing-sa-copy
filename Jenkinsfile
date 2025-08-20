@@ -6,7 +6,7 @@ pipeline {
         BACKEND_IMAGE  = "spring"
         FRONTEND_PATH  = "angular-16-client"
         BACKEND_PATH   = "spring-boot-server"
-        KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config" // <-- important pour Minikube
+        KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config"
     }
 
     stages {
@@ -24,6 +24,7 @@ pipeline {
                     bat '''
                         npm install
                         npm run build --prod
+                        @FOR /f "tokens=*" %i IN ('minikube docker-env --shell cmd') DO @%i
                         docker build -t %FRONTEND_IMAGE%:latest .
                     '''
                 }
@@ -36,6 +37,7 @@ pipeline {
                     echo "⚡ Build Spring Boot + Docker image"
                     bat '''
                         mvnw.cmd clean package -DskipTests
+                        @FOR /f "tokens=*" %i IN ('minikube docker-env --shell cmd') DO @%i
                         docker build -t %BACKEND_IMAGE%:latest .
                     '''
                 }
@@ -59,7 +61,6 @@ pipeline {
             steps {
                 echo "🔍 Vérification des pods et services"
                 bat '''
-                    docker images
                     kubectl get pods -o wide
                     kubectl get svc -o wide
                     kubectl get ingress
