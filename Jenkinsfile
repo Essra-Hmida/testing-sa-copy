@@ -59,6 +59,7 @@ pipeline {
             steps {
                 echo "🔍 Vérification des pods et services"
                 bat '''
+                    docker images
                     kubectl get pods -o wide
                     kubectl get svc -o wide
                     kubectl get ingress
