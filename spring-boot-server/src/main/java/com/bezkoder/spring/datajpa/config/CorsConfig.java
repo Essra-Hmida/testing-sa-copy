@@ -15,7 +15,7 @@ public class CorsConfig {
         CorsConfiguration config = new CorsConfiguration();
         
         // Allow all origins - you may want to restrict this in production
-        config.addAllowedOrigin("http://localhost:4200");
+        config.addAllowedOrigin("http://ams-app.com");
 
 
         
