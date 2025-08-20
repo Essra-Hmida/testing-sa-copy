@@ -1,95 +1,90 @@
 pipeline {
     agent any
 
+    environment {
+        FRONTEND_IMAGE = "angular-app"
+        BACKEND_IMAGE  = "spring"
+        FRONTEND_PATH  = "angular-16-client"
+        BACKEND_PATH   = "spring-boot-server"
+    }
+
     stages {
-        stage('Checkout') {
+        stage('Checkout SCM') {
             steps {
                 echo "📥 Clonage du repo Git"
-                checkout([$class: 'GitSCM',
-                    branches: [[name: "*/master"]],
-                    userRemoteConfigs: [[
-                        url: 'https://github.com/Essra-Hmida/testing-sa-copy.git',
-                        credentialsId: 'github-credentials'
-                    ]]
-                ])
+                checkout scm
             }
         }
 
         stage('Setup Minikube Docker Env') {
             steps {
                 echo "⚙️ Configuration Docker Minikube"
-                bat """
-                    minikube docker-env --shell cmd > minikube_env.bat
-                    call minikube_env.bat
-                """
-            }
-        }
-
-        stage('Check Docker Env') {
-            steps {
-                echo "🔍 Vérification Docker Minikube"
-                bat "docker ps"
+                bat '''
+                    powershell -Command "minikube docker-env --shell powershell | Invoke-Expression"
+                '''
             }
         }
 
         stage('Build Angular') {
             steps {
-                echo "🛠️ Build Angular"
-                bat """
-                    cd angular-16-client
-                    npm install
-                    npm run build --prod
-                    docker build -t angular-app:latest .
-                """
+                dir("${FRONTEND_PATH}") {
+                    echo "⚡ Build Angular + Docker image"
+                    bat '''
+                        npm install
+                        npm run build --prod
+                        docker build -t %FRONTEND_IMAGE%:latest .
+                    '''
+                }
             }
         }
 
         stage('Build Spring Boot') {
             steps {
-                echo "☕ Build Spring Boot"
-                bat """
-                    cd spring-boot-server
-                    mvn clean package -DskipTests
-                    docker build -t spring-app:latest .
-                """
+                dir("${BACKEND_PATH}") {
+                    echo "⚡ Build Spring Boot + Docker image"
+                    bat '''
+                        mvnw.cmd clean package -DskipTests
+                        docker build -t %BACKEND_IMAGE%:latest .
+                    '''
+                }
             }
         }
 
         stage('Deploy Kubernetes Resources') {
             steps {
-                echo "🚀 Déploiement sur Kubernetes"
-                bat """
+                echo "🚀 Déploiement des manifests K8s"
+                bat '''
                     kubectl apply -f mysql/k8s/
                     kubectl apply -f phpmyadmin/k8s/
                     kubectl apply -f spring-boot-server/k8s/
                     kubectl apply -f angular-16-client/k8s/
                     kubectl apply -f ingress/k8s/
-                """
+                '''
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                echo "🔎 Vérification des pods et services"
-                bat "kubectl get pods -o wide"
-                bat "kubectl get svc -o wide"
-                bat "kubectl get ingress"
+                echo "🔍 Vérification des pods et services"
+                bat '''
+                    kubectl get pods -o wide
+                    kubectl get svc -o wide
+                    kubectl get ingress
+                '''
             }
         }
     }
 
     post {
-        failure {
-            echo "❌ Échec du pipeline → rollback"
-            script {
-                bat '''
-                    kubectl rollout undo deployment spring-deployment   2>nul  || echo "Spring rollback failed"
-                    kubectl rollout undo deployment angular-deployment 2>nul  || echo "Angular rollback failed"
-                '''
-            }
-        }
         success {
             echo "✅ Pipeline terminé avec succès"
+        }
+        failure {
+            echo "❌ Échec du pipeline → rollback"
+            bat '''
+                kubectl rollout undo deployment spring-deployment 2>nul || echo "Spring rollback failed"
+                kubectl rollout undo deployment angular-deployment 2>nul || echo "Angular rollback failed"
+            '''
         }
     }
 }
