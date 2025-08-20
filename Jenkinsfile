@@ -16,6 +16,8 @@ pipeline {
             }
         }
 
+        // Stage supprimé temporairement
+        /*
         stage('Setup Minikube Docker Env') {
             steps {
                 echo "⚙️ Configuration Docker Minikube"
@@ -24,6 +26,7 @@ pipeline {
                 '''
             }
         }
+        */
 
         stage('Build Angular') {
             steps {
