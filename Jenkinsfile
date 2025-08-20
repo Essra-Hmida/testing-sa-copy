@@ -6,6 +6,7 @@ pipeline {
         BACKEND_IMAGE  = "spring"
         FRONTEND_PATH  = "angular-16-client"
         BACKEND_PATH   = "spring-boot-server"
+        KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config" // <-- important pour Minikube
     }
 
     stages {
@@ -15,18 +16,6 @@ pipeline {
                 checkout scm
             }
         }
-
-        // Stage supprimé temporairement
-        /*
-        stage('Setup Minikube Docker Env') {
-            steps {
-                echo "⚙️ Configuration Docker Minikube"
-                bat '''
-                    powershell -Command "minikube docker-env --shell powershell | Invoke-Expression"
-                '''
-            }
-        }
-        */
 
         stage('Build Angular') {
             steps {
@@ -57,11 +46,11 @@ pipeline {
             steps {
                 echo "🚀 Déploiement des manifests K8s"
                 bat '''
-                    kubectl apply -f mysql/k8s/
-                    kubectl apply -f phpmyadmin/k8s/
-                    kubectl apply -f spring-boot-server/k8s/
-                    kubectl apply -f angular-16-client/k8s/
-                    kubectl apply -f ingress/k8s/
+                    kubectl apply -f mysql/k8s/ --validate=false
+                    kubectl apply -f phpmyadmin/k8s/ --validate=false
+                    kubectl apply -f spring-boot-server/k8s/ --validate=false
+                    kubectl apply -f angular-16-client/k8s/ --validate=false
+                    kubectl apply -f ingress/k8s/ --validate=false
                 '''
             }
         }
