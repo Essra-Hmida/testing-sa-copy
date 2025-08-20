@@ -20,19 +20,12 @@ pipeline {
         stage('Build Angular') {
             steps {
                 dir("${FRONTEND_PATH}") {
-                    echo "⚡ Build Angular + Docker image"
+                    echo "⚡ Build Angular + Docker image via Minikube"
                     bat '''
-@echo off
-REM Configure le shell pour utiliser le Docker de Minikube
-@FOR /f "tokens=*" %i IN ('minikube docker-env --shell cmd') DO @%i
-
-REM Installer les dépendances et builder Angular
-npm install
-npm run build --prod
-
-REM Construire l'image Docker directement dans Minikube
-docker build -t %FRONTEND_IMAGE%:latest .
-'''
+                        npm install
+                        npm run build --prod
+                        minikube image build -t %FRONTEND_IMAGE%:latest .
+                    '''
                 }
             }
         }
@@ -40,18 +33,11 @@ docker build -t %FRONTEND_IMAGE%:latest .
         stage('Build Spring Boot') {
             steps {
                 dir("${BACKEND_PATH}") {
-                    echo "⚡ Build Spring Boot + Docker image"
+                    echo "⚡ Build Spring Boot + Docker image via Minikube"
                     bat '''
-@echo off
-REM Configure le shell pour utiliser le Docker de Minikube
-@FOR /f "tokens=*" %i IN ('minikube docker-env --shell cmd') DO @%i
-
-REM Builder le projet Spring Boot
-mvnw.cmd clean package -DskipTests
-
-REM Construire l'image Docker directement dans Minikube
-docker build -t %BACKEND_IMAGE%:latest .
-'''
+                        mvnw.cmd clean package -DskipTests
+                        minikube image build -t %BACKEND_IMAGE%:latest .
+                    '''
                 }
             }
         }
@@ -60,12 +46,12 @@ docker build -t %BACKEND_IMAGE%:latest .
             steps {
                 echo "🚀 Déploiement des manifests K8s"
                 bat '''
-kubectl apply -f mysql/k8s/ --validate=false
-kubectl apply -f phpmyadmin/k8s/ --validate=false
-kubectl apply -f spring-boot-server/k8s/ --validate=false
-kubectl apply -f angular-16-client/k8s/ --validate=false
-kubectl apply -f ingress/k8s/ --validate=false
-'''
+                    kubectl apply -f mysql/k8s/ --validate=false
+                    kubectl apply -f phpmyadmin/k8s/ --validate=false
+                    kubectl apply -f spring-boot-server/k8s/ --validate=false
+                    kubectl apply -f angular-16-client/k8s/ --validate=false
+                    kubectl apply -f ingress/k8s/ --validate=false
+                '''
             }
         }
 
@@ -73,10 +59,10 @@ kubectl apply -f ingress/k8s/ --validate=false
             steps {
                 echo "🔍 Vérification des pods et services"
                 bat '''
-kubectl get pods -o wide
-kubectl get svc -o wide
-kubectl get ingress
-'''
+                    kubectl get pods -o wide
+                    kubectl get svc -o wide
+                    kubectl get ingress
+                '''
             }
         }
     }
@@ -88,9 +74,9 @@ kubectl get ingress
         failure {
             echo "❌ Échec du pipeline → rollback"
             bat '''
-kubectl rollout undo deployment spring-deployment 2>nul || echo "Spring rollback failed"
-kubectl rollout undo deployment angular-deployment 2>nul || echo "Angular rollback failed"
-'''
+                kubectl rollout undo deployment spring-deployment 2>nul || echo "Spring rollback failed"
+                kubectl rollout undo deployment angular-deployment 2>nul || echo "Angular rollback failed"
+            '''
         }
     }
 }
