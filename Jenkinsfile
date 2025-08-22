@@ -2,81 +2,64 @@ pipeline {
     agent any
 
     environment {
-        FRONTEND_IMAGE = "angular-app"
-        BACKEND_IMAGE  = "spring"
-        FRONTEND_PATH  = "angular-16-client"
-        BACKEND_PATH   = "spring-boot-server"
-        KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config"
+        // Replace with your actual Docker repo if pushing; else local Minikube
+        SPRING_IMAGE = "spring:latest"
+        ANGULAR_IMAGE = "angular-app:latest"
+        KUBECONFIG = "${env.HOME}\\.kube\\config" // adjust path if needed
     }
 
     stages {
-        stage('Checkout SCM') {
+        stage('Checkout') {
             steps {
-                echo "📥 Clonage du repo Git"
-                checkout scm
+                git branch: 'main', url: 'https://github.com/yourusername/your-repo.git'
             }
         }
 
-        stage('Build Angular') {
+        stage('Setup Minikube Docker Env') {
             steps {
-                dir("${FRONTEND_PATH}") {
-                    echo "⚡ Build Angular + Docker image via Minikube"
-                    bat '''
-                        npm install
-                        npm run build --prod
-                        minikube image build -t %FRONTEND_IMAGE%:latest .
-                    '''
-                }
+                // Switch Docker CLI to Minikube daemon
+                bat 'minikube -p minikube docker-env --shell cmd > docker-env.cmd'
+                bat 'docker-env.cmd'
             }
         }
 
         stage('Build Spring Boot') {
             steps {
-                dir("${BACKEND_PATH}") {
-                    echo "⚡ Build Spring Boot + Docker image via Minikube"
-                    bat '''
-                        mvnw.cmd clean package -DskipTests
-                        minikube image build -t %BACKEND_IMAGE%:latest .
-                    '''
+                dir('spring-boot-server') {
+                    bat 'mvn clean package -DskipTests'
+                    bat 'docker build -t %SPRING_IMAGE% .'
                 }
             }
         }
 
-        stage('Deploy Kubernetes Resources') {
+        stage('Build Angular App') {
             steps {
-                echo "🚀 Déploiement des manifests K8s"
-                bat '''
-                    kubectl apply -f mysql/k8s/ --validate=false
-                    kubectl apply -f phpmyadmin/k8s/ --validate=false
-                    kubectl apply -f spring-boot-server/k8s/ --validate=false
-                    kubectl apply -f angular-16-client/k8s/ --validate=false
-                    kubectl apply -f ingress/k8s/ --validate=false
-                '''
+                dir('angular-16-client') {
+                    bat 'npm install'
+                    bat 'npm run build --prod'
+                    bat 'docker build -t %ANGULAR_IMAGE% .'
+                }
             }
         }
 
-        stage('Verify Deployment') {
+        stage('Deploy Kubernetes Manifests') {
             steps {
-                echo "🔍 Vérification des pods et services"
-                bat '''
-                    kubectl get pods -o wide
-                    kubectl get svc -o wide
-                    kubectl get ingress
-                '''
+                // Apply manifests folder by folder
+                bat 'kubectl apply -f mysql/k8s/'
+                bat 'kubectl apply -f phpmyadmin/k8s/'
+                bat 'kubectl apply -f spring-boot-server/k8s/'
+                bat 'kubectl apply -f angular-16-client/k8s/'
+                bat 'kubectl apply -f ingress/k8s/'
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline terminé avec succès"
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo "❌ Échec du pipeline → rollback"
-            bat '''
-                kubectl rollout undo deployment spring-deployment 2>nul || echo "Spring rollback failed"
-                kubectl rollout undo deployment angular-deployment 2>nul || echo "Angular rollback failed"
-            '''
+            echo '🚨 Pipeline failed. Check logs!'
         }
     }
 }
