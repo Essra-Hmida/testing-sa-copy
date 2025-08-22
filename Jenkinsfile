@@ -15,6 +15,7 @@ pipeline {
                 git(
                     url: 'https://github.com/Essra-Hmida/testing-sa-copy.git',
                     credentialsId: 'github-credentials'
+                )
             }
         }
 
