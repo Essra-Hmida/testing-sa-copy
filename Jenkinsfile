@@ -5,13 +5,16 @@ pipeline {
         // Replace with your actual Docker repo if pushing; else local Minikube
         SPRING_IMAGE = "spring:latest"
         ANGULAR_IMAGE = "angular-app:latest"
-        KUBECONFIG = "${env.HOME}\\.kube\\config" // adjust path if needed
+        KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config"
+        GIT_CREDENTIALS = credentials('github-credentials')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/yourusername/your-repo.git'
+                git(
+                    url: 'https://github.com/Essra-Hmida/testing-sa-copy.git',
+                    credentialsId: 'github-credentials'
             }
         }
 
