@@ -20,7 +20,7 @@ pipeline {
         stage('Setup Minikube Docker Env') {
             steps {
                 echo "🔧 Configuration Docker Minikube"
-                bat '@FOR /f "tokens=*" %i IN ('minikube -p minikube docker-env --shell cmd') DO @%i'
+                bat 'setup-minikube-docker.bat'
             }
         }
 
