@@ -12,26 +12,30 @@ pipeline {
     stages {
         stage('Checkout SCM') {
             steps {
-                echo "📥 Clonage du repo Git"
                 checkout scm
             }
         }
 
-        stage('Setup Minikube Docker Env') {
+        stage('Set Docker Env for Minikube') {
             steps {
-                echo "🔧 Configuration Docker Minikube"
-                bat 'setup-minikube-docker.bat'
+                echo "🔧 Configure Jenkins to use Minikube Docker"
+                bat '''
+                    REM Generate env variables into a batch file
+                    minikube docker-env --shell cmd > docker_env.bat
+                    call docker_env.bat
+                    docker info
+                '''
             }
         }
 
         stage('Build Angular') {
             steps {
                 dir("${FRONTEND_PATH}") {
-                    echo "⚡ Build Angular + Docker image via Minikube"
                     bat '''
                         npm install
                         npm run build --prod
-                        minikube image build -t %FRONTEND_IMAGE%:latest .
+                        call ..\\docker_env.bat
+                        docker build -t %FRONTEND_IMAGE%:%BUILD_NUMBER% .
                     '''
                 }
             }
@@ -40,19 +44,22 @@ pipeline {
         stage('Build Spring Boot') {
             steps {
                 dir("${BACKEND_PATH}") {
-                    echo "⚡ Build Spring Boot + Docker image via Minikube"
                     bat '''
                         mvnw.cmd clean package -DskipTests
-                        minikube image build -t %BACKEND_IMAGE%:latest .
+                        call ..\\docker_env.bat
+                        docker build -t %BACKEND_IMAGE%:%BUILD_NUMBER% .
                     '''
                 }
             }
         }
 
-        stage('Deploy Kubernetes Resources') {
+        stage('Deploy to Kubernetes') {
             steps {
-                echo "🚀 Déploiement des manifests K8s avec images locales"
                 bat '''
+                    REM Update image tags in Kubernetes manifests before applying
+                    powershell -Command "(Get-Content spring-boot-server/k8s/deployment.yaml) -replace 'image: spring:.*', 'image: spring:%BUILD_NUMBER%' | Set-Content spring-boot-server/k8s/deployment.yaml"
+                    powershell -Command "(Get-Content angular-16-client/k8s/deployment.yaml) -replace 'image: angular-app:.*', 'image: angular-app:%BUILD_NUMBER%' | Set-Content angular-16-client/k8s/deployment.yaml"
+
                     kubectl apply -f mysql/k8s/ --validate=false
                     kubectl apply -f phpmyadmin/k8s/ --validate=false
                     kubectl apply -f spring-boot-server/k8s/ --validate=false
@@ -64,26 +71,12 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-                echo "🔍 Vérification des pods et services"
                 bat '''
                     kubectl get pods -o wide
                     kubectl get svc -o wide
                     kubectl get ingress
                 '''
             }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Pipeline terminé avec succès"
-        }
-        failure {
-            echo "❌ Échec du pipeline → rollback"
-            bat '''
-                kubectl rollout undo deployment spring-deployment 2>nul || echo "Spring rollback failed"
-                kubectl rollout undo deployment angular-deployment 2>nul || echo "Angular rollback failed"
-            '''
         }
     }
 }
