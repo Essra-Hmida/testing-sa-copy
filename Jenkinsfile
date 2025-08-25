@@ -4,8 +4,8 @@ pipeline {
     environment {
         FRONTEND_IMAGE = "angular-app"
         BACKEND_IMAGE  = "spring"
-        FRONTEND_PATH  = "angular-16-client"
-        BACKEND_PATH   = "spring-boot-server"
+        FRONTEND_PATH  = "/home/docker/angular-16-client"
+        BACKEND_PATH   = "/home/docker/spring-boot-server"
         KUBECONFIG     = "C:\\Users\\DELL\\.kube\\config"
     }
 
@@ -16,57 +16,48 @@ pipeline {
             }
         }
 
-        stage('Start Minikube & Set Docker Env') {
+        stage('Copy Project to Minikube') {
             steps {
                 powershell '''
-                    # Démarrer Minikube si ce n'est pas déjà fait
-                    minikube status || minikube start
+                    # Créer un dossier temporaire dans Minikube
+                    minikube ssh "mkdir -p /home/docker"
 
-                    # Configurer Jenkins pour utiliser le Docker interne de Minikube
-                    minikube -p minikube docker-env --shell powershell | Invoke-Expression
+                    # Copier le projet Angular
+                    minikube cp angular-16-client /home/docker/angular-16-client
 
-                    # Vérifier que Docker pointe bien vers Minikube
-                    docker info
+                    # Copier le projet Spring Boot
+                    minikube cp spring-boot-server /home/docker/spring-boot-server
                 '''
             }
         }
 
-        stage('Build Angular') {
+        stage('Build Angular in Minikube') {
             steps {
-                dir("${FRONTEND_PATH}") {
-                    powershell '''
-                        npm install
-                        npm run build --prod
-                        docker build -t $env:FRONTEND_IMAGE:$env:BUILD_NUMBER .
-                    '''
-                }
+                powershell '''
+                    minikube ssh "cd ${FRONTEND_PATH} && npm install && npm run build --prod && docker build -t angular-app:$env:BUILD_NUMBER ."
+                '''
             }
         }
 
-        stage('Build Spring Boot') {
+        stage('Build Spring Boot in Minikube') {
             steps {
-                dir("${BACKEND_PATH}") {
-                    powershell '''
-                        ./mvnw.cmd clean package -DskipTests
-                        docker build -t $env:BACKEND_IMAGE:$env:BUILD_NUMBER .
-                    '''
-                }
+                powershell '''
+                    minikube ssh "cd ${BACKEND_PATH} && ./mvnw clean package -DskipTests && docker build -t spring:$env:BUILD_NUMBER ."
+                '''
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
                 powershell '''
-                    # Mettre à jour les tags dans les manifests
-                    (Get-Content spring-boot-server/k8s/deployment.yaml) -replace 'image: spring:.*', "image: spring:$env:BUILD_NUMBER" | Set-Content spring-boot-server/k8s/deployment.yaml
-                    (Get-Content angular-16-client/k8s/deployment.yaml) -replace 'image: angular-app:.*', "image: angular-app:$env:BUILD_NUMBER" | Set-Content angular-16-client/k8s/deployment.yaml
+                    # Mettre à jour les images directement dans les deployments
+                    kubectl set image deployment/spring-deployment spring=spring:$env:BUILD_NUMBER --kubeconfig $env:KUBECONFIG
+                    kubectl set image deployment/angular-deployment angular-app=angular-app:$env:BUILD_NUMBER --kubeconfig $env:KUBECONFIG
 
-                    # Appliquer les manifests
-                    kubectl apply -f mysql/k8s/ --validate=false
-                    kubectl apply -f phpmyadmin/k8s/ --validate=false
-                    kubectl apply -f spring-boot-server/k8s/ --validate=false
-                    kubectl apply -f angular-16-client/k8s/ --validate=false
-                    kubectl apply -f ingress/k8s/ --validate=false
+                    # Appliquer les autres manifests (MySQL, phpMyAdmin, ingress)
+                    kubectl apply -f mysql/k8s/ --validate=false --kubeconfig $env:KUBECONFIG
+                    kubectl apply -f phpmyadmin/k8s/ --validate=false --kubeconfig $env:KUBECONFIG
+                    kubectl apply -f ingress/k8s/ --validate=false --kubeconfig $env:KUBECONFIG
                 '''
             }
         }
@@ -74,9 +65,9 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 powershell '''
-                    kubectl get pods -o wide
-                    kubectl get svc -o wide
-                    kubectl get ingress
+                    kubectl get pods -o wide --kubeconfig $env:KUBECONFIG
+                    kubectl get svc -o wide --kubeconfig $env:KUBECONFIG
+                    kubectl get ingress --kubeconfig $env:KUBECONFIG
                 '''
             }
         }
