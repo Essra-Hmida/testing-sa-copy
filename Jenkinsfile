@@ -16,13 +16,16 @@ pipeline {
             }
         }
 
-        stage('Set Docker Env for Minikube') {
+        stage('Start Minikube & Set Docker Env') {
             steps {
-                echo "🔧 Configure Jenkins to use Minikube Docker"
-                bat '''
-                    REM Generate env variables into a batch file
-                    minikube docker-env --shell cmd > docker_env.bat
-                    call docker_env.bat
+                powershell '''
+                    # Démarrer Minikube si ce n'est pas déjà fait
+                    minikube status || minikube start
+
+                    # Configurer Jenkins pour utiliser le Docker interne de Minikube
+                    minikube -p minikube docker-env --shell powershell | Invoke-Expression
+
+                    # Vérifier que Docker pointe bien vers Minikube
                     docker info
                 '''
             }
@@ -31,11 +34,10 @@ pipeline {
         stage('Build Angular') {
             steps {
                 dir("${FRONTEND_PATH}") {
-                    bat '''
+                    powershell '''
                         npm install
                         npm run build --prod
-                        call ..\\docker_env.bat
-                        docker build -t %FRONTEND_IMAGE%:%BUILD_NUMBER% .
+                        docker build -t $env:FRONTEND_IMAGE:$env:BUILD_NUMBER .
                     '''
                 }
             }
@@ -44,10 +46,9 @@ pipeline {
         stage('Build Spring Boot') {
             steps {
                 dir("${BACKEND_PATH}") {
-                    bat '''
-                        mvnw.cmd clean package -DskipTests
-                        call ..\\docker_env.bat
-                        docker build -t %BACKEND_IMAGE%:%BUILD_NUMBER% .
+                    powershell '''
+                        ./mvnw.cmd clean package -DskipTests
+                        docker build -t $env:BACKEND_IMAGE:$env:BUILD_NUMBER .
                     '''
                 }
             }
@@ -55,11 +56,12 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                bat '''
-                    REM Update image tags in Kubernetes manifests before applying
-                    powershell -Command "(Get-Content spring-boot-server/k8s/deployment.yaml) -replace 'image: spring:.*', 'image: spring:%BUILD_NUMBER%' | Set-Content spring-boot-server/k8s/deployment.yaml"
-                    powershell -Command "(Get-Content angular-16-client/k8s/deployment.yaml) -replace 'image: angular-app:.*', 'image: angular-app:%BUILD_NUMBER%' | Set-Content angular-16-client/k8s/deployment.yaml"
+                powershell '''
+                    # Mettre à jour les tags dans les manifests
+                    (Get-Content spring-boot-server/k8s/deployment.yaml) -replace 'image: spring:.*', "image: spring:$env:BUILD_NUMBER" | Set-Content spring-boot-server/k8s/deployment.yaml
+                    (Get-Content angular-16-client/k8s/deployment.yaml) -replace 'image: angular-app:.*', "image: angular-app:$env:BUILD_NUMBER" | Set-Content angular-16-client/k8s/deployment.yaml
 
+                    # Appliquer les manifests
                     kubectl apply -f mysql/k8s/ --validate=false
                     kubectl apply -f phpmyadmin/k8s/ --validate=false
                     kubectl apply -f spring-boot-server/k8s/ --validate=false
@@ -71,7 +73,7 @@ pipeline {
 
         stage('Verify Deployment') {
             steps {
-                bat '''
+                powershell '''
                     kubectl get pods -o wide
                     kubectl get svc -o wide
                     kubectl get ingress
