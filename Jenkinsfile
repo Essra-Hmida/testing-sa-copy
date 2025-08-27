@@ -24,6 +24,7 @@ pipeline {
         stage('Build Angular') {
             steps {
                 dir('angular-16-client') {
+                    sh 'rm -rf node_modules package-lock.json'
                     sh 'npm install'
                     sh 'npm run build --prod'
                 }
