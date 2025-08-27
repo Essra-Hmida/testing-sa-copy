@@ -15,46 +15,6 @@ spec:
     requests:
       storage: 5Gi
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: kubeconfig-config
-  namespace: jenkins
-data:
-  config: |
-    apiVersion: v1
-    kind: Config
-    clusters:
-      - name: minikube
-        cluster:
-          certificate-authority: C:/Users/DELL/.minikube/ca.crt
-          server: https://192.168.59.104:8443
-          extensions:
-            - name: cluster_info
-              extension:
-                provider: minikube.sigs.k8s.io
-                version: v1.36.0
-                last-update: Wed, 27 Aug 2025 09:34:09 WAT
-    contexts:
-      - name: minikube
-        context:
-          cluster: minikube
-          user: minikube
-          namespace: default
-          extensions:
-            - name: context_info
-              extension:
-                provider: minikube.sigs.k8s.io
-                version: v1.36.0
-                last-update: Wed, 27 Aug 2025 09:34:09 WAT
-    current-context: minikube
-    preferences: {}
-    users:
-      - name: minikube
-        user:
-          client-certificate: C:/Users/DELL/.minikube/profiles/minikube/client.crt
-          client-key: C:/Users/DELL/.minikube/profiles/minikube/client.key
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -80,16 +40,23 @@ spec:
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
-            - name: kubeconfig
+            - name: kubeconfig-files
               mountPath: /home/jenkins/.kube
               readOnly: true
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
       volumes:
         - name: jenkins-data
           persistentVolumeClaim:
             claimName: jenkins-pvc
-        - name: kubeconfig
-          configMap:
-            name: kubeconfig-config
+        - name: kubeconfig-files
+          hostPath:
+            path: /mnt/kubeconfig  # chemin Linux via `minikube mount`
+            type: Directory
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
 ---
 apiVersion: v1
 kind: Service
