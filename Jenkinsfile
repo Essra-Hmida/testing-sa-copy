@@ -27,7 +27,7 @@ pipeline {
                     // Timeout plus long pour npm
                     sh 'npm set timeout 600000'
                     sh 'npm install'
-                    sh 'npm run build'
+                    sh 'npm run build --prod'
                 }
             }
         }
