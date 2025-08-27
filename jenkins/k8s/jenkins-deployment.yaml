@@ -35,8 +35,8 @@ spec:
           image: custom-jenkins:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8080   # Web UI
-            - containerPort: 50000  # Agent connections
+            - containerPort: 8080
+            - containerPort: 50000
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
@@ -51,12 +51,10 @@ spec:
             claimName: jenkins-pvc
         - name: kubeconfig-files
           hostPath:
-            path: /mnt/kubeconfig  # chemin Linux via `minikube mount`
-            type: Directory
+            path: C:/Users/DELL/minikube-kubeconfig   # absolute path Windows -> Pod
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock
-            type: Socket
 ---
 apiVersion: v1
 kind: Service
