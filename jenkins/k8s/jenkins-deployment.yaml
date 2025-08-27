@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: jenkins
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-pvc
+  namespace: jenkins
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeconfig-config
+  namespace: jenkins
+data:
+  config: |
+    apiVersion: v1
+    kind: Config
+    clusters:
+      - name: minikube
+        cluster:
+          certificate-authority: C:/Users/DELL/.minikube/ca.crt
+          server: https://192.168.59.104:8443
+          extensions:
+            - name: cluster_info
+              extension:
+                provider: minikube.sigs.k8s.io
+                version: v1.36.0
+                last-update: Wed, 27 Aug 2025 09:34:09 WAT
+    contexts:
+      - name: minikube
+        context:
+          cluster: minikube
+          user: minikube
+          namespace: default
+          extensions:
+            - name: context_info
+              extension:
+                provider: minikube.sigs.k8s.io
+                version: v1.36.0
+                last-update: Wed, 27 Aug 2025 09:34:09 WAT
+    current-context: minikube
+    preferences: {}
+    users:
+      - name: minikube
+        user:
+          client-certificate: C:/Users/DELL/.minikube/profiles/minikube/client.crt
+          client-key: C:/Users/DELL/.minikube/profiles/minikube/client.key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins
+  namespace: jenkins
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins
+  template:
+    metadata:
+      labels:
+        app: jenkins
+    spec:
+      containers:
+        - name: jenkins
+          image: custom-jenkins:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080   # Web UI
+            - containerPort: 50000  # Agent connections
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+            - name: kubeconfig
+              mountPath: /home/jenkins/.kube
+              readOnly: true
+      volumes:
+        - name: jenkins-data
+          persistentVolumeClaim:
+            claimName: jenkins-pvc
+        - name: kubeconfig
+          configMap:
+            name: kubeconfig-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-service
+  namespace: jenkins
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app: jenkins
