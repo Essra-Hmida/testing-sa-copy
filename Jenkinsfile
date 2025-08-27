@@ -2,24 +2,32 @@ pipeline {
     agent any
 
     environment {
-        FRONTEND_IMAGE = 'angular-16-client:latest'
-        BACKEND_IMAGE  = 'spring-boot-server:latest'
-        KUBECONFIG     = '/home/jenkins/.kube/config'  // point vers kubeconfig monté
+        FRONTEND_IMAGE = "angular-app:latest"
+        BACKEND_IMAGE = "springboot-app:latest"
+        KUBECONFIG = "/home/jenkins/.kube/minikube/config"
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Checkout SCM') {
             steps {
-                git url: 'https://github.com/Essra-Hmida/testing-sa-copy.git', credentialsId: 'github-creds'
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/master']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/Essra-Hmida/testing-sa-copy.git',
+                        credentialsId: 'github-creds'
+                    ]]
+                ])
             }
         }
 
         stage('Build Angular') {
             steps {
                 dir('angular-16-client') {
+                    // Timeout plus long pour npm
+                    sh 'npm set timeout 600000'
                     sh 'npm install'
-                    sh 'npm run build -- --output-path=dist'
-                    sh "docker build -t ${FRONTEND_IMAGE} ."
+                    sh 'npm run build'
                 }
             }
         }
@@ -27,28 +35,49 @@ pipeline {
         stage('Build Spring Boot') {
             steps {
                 dir('spring-boot-server') {
-                    sh './mvnw clean package -DskipTests'
-                    sh "docker build -t ${BACKEND_IMAGE} ."
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                script {
+                    // Utiliser Docker de Minikube
+                    sh 'eval $(minikube -p minikube docker-env)'
+                    
+                    sh "docker build -t ${env.FRONTEND_IMAGE} angular-16-client"
+                    sh "docker build -t ${env.BACKEND_IMAGE} spring-boot-server"
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh "kubectl --kubeconfig=${KUBECONFIG} apply -f mysql/k8s/ --validate=false"
-                sh "kubectl --kubeconfig=${KUBECONFIG} apply -f phpmyadmin/k8s/ --validate=false"
-                sh "kubectl --kubeconfig=${KUBECONFIG} apply -f spring-boot-server/k8s/ --validate=false"
-                sh "kubectl --kubeconfig=${KUBECONFIG} apply -f angular-16-client/k8s/ --validate=false"
-                sh "kubectl --kubeconfig=${KUBECONFIG} apply -f ingress/k8s/ --validate=false"
+                script {
+                    // Déploiement avec kubeconfig monté
+                    sh "kubectl --kubeconfig=${env.KUBECONFIG} apply -f k8s/angular-16-client/ --validate=false"
+                    sh "kubectl --kubeconfig=${env.KUBECONFIG} apply -f k8s/spring-boot-server/ --validate=false"
+                }
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                sh "kubectl --kubeconfig=${KUBECONFIG} get pods -o wide"
-                sh "kubectl --kubeconfig=${KUBECONFIG} get svc"
-                sh "kubectl --kubeconfig=${KUBECONFIG} get ingress"
+                script {
+                    sh "kubectl --kubeconfig=${env.KUBECONFIG} get pods"
+                    sh "kubectl --kubeconfig=${env.KUBECONFIG} get svc"
+                }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline terminé avec succès !'
+        }
+        failure {
+            echo 'Pipeline échoué. Vérifie les logs.'
         }
     }
 }
