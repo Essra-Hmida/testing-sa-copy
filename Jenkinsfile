@@ -18,7 +18,7 @@ pipeline {
 
         stage('Build Angular') {
             steps {
-                dir('angular-client') {
+                dir('angular-16-client') {
                     sh 'npm install'
                     sh 'npm run build --prod'
                 }
