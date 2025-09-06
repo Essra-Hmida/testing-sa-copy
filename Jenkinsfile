@@ -5,7 +5,7 @@ pipeline {
     stage('Checkout') {
       steps {
         // Cloner depuis ton repo GitHub
-        git url: 'https://github.com/TON_UTILISATEUR/TON_REPO.git', branch: 'main'
+        git url: 'https://github.com/Essra-Hmida/testing-sa-copy.git', branch: 'master'
       }
     }
 
