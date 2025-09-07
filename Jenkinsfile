@@ -10,7 +10,11 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'master', url: 'https://github.com/Essra-Hmida/testing-sa-copy.git'
+                git(
+                    branch: 'master',
+                    credentialsId: 'github-creds',
+                    url: 'https://github.com/Essra-Hmida/testing-sa-copy.git'
+                )
             }
         }
 
@@ -36,12 +40,10 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 script {
-                    // Mettre à jour les manifests avec les tags des images
                     sh """
                     sed -i 's|image: spring-boot-app:.*|image: ${DOCKER_IMAGE_SPRING}|g' spring-boot-server/k8s/spring-deployment.yaml
                     sed -i 's|image: angular-app:.*|image: ${DOCKER_IMAGE_ANGULAR}|g' angular-16-client/k8s/angular-deploy.yaml
 
-                    # Déploiement
                     kubectl apply -f mysql/k8s/ --validate=false
                     kubectl apply -f phpmyadmin/k8s/ --validate=false
                     kubectl apply -f spring-boot-server/k8s/ --validate=false
