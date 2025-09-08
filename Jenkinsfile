@@ -31,7 +31,7 @@ pipeline {
             steps {
                 dir('angular-16-client') {
                     sh 'npm install'
-                    sh 'npm run build --prod'
+                    sh 'npm run build -- --progress --verbose'
                     sh "docker build -t ${DOCKER_IMAGE_ANGULAR} ."
                 }
             }
