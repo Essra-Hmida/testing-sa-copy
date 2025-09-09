@@ -1,20 +1,39 @@
+# --------------------------------------- 
+# Namespace Jenkins
+# --------------------------------------- 
 apiVersion: v1
 kind: Namespace
 metadata:
   name: jenkins
 ---
+# --------------------------------------- 
+# ServiceAccount dédié pour Jenkins 
+# --------------------------------------- 
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ServiceAccount
 metadata:
-  name: jenkins-pvc
+  name: jenkins
   namespace: jenkins
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
 ---
+# --------------------------------------- 
+# ClusterRoleBinding pour donner les droits admin 
+# --------------------------------------- 
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: jenkins-admin
+subjects:
+  - kind: ServiceAccount
+    name: jenkins
+    namespace: jenkins
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# --------------------------------------- 
+# Deployment Jenkins avec correction des permissions
+# --------------------------------------- 
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -30,6 +49,22 @@ spec:
       labels:
         app: jenkins
     spec:
+      serviceAccountName: jenkins
+      # CORRECTION PRINCIPALE : Permissions pour le volume
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      # Init container pour fixer les permissions
+      initContainers:
+        - name: fix-permissions
+          image: busybox:latest
+          command: ['sh', '-c', 'chown -R 1000:1000 /var/jenkins_home && chmod -R 755 /var/jenkins_home']
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+          securityContext:
+            runAsUser: 0  # Root pour changer les permissions
       containers:
         - name: jenkins
           image: custom-jenkins:latest
@@ -40,22 +75,63 @@ spec:
           volumeMounts:
             - name: jenkins-data
               mountPath: /var/jenkins_home
-            - name: kubeconfig-files
-              mountPath: /home/jenkins/.kube
-              readOnly: true
             - name: docker-sock
               mountPath: /var/run/docker.sock
+            - name: kube-certs
+              mountPath: /home/jenkins/.kube
+              readOnly: true
+          env:
+            - name: KUBECONFIG
+              value: /home/jenkins/.kube/config
+            - name: DOCKER_HOST
+              value: unix:///var/run/docker.sock
+            - name: JAVA_OPTS
+              value: "-Xmx512m -Djenkins.install.runSetupWizard=false"
+            # Variable pour éviter les avertissements de permissions
+            - name: JENKINS_UC_INSECURE
+              value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          # Sondes de santé plus tolérantes
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 180  # Plus de temps pour le démarrage
+            periodSeconds: 30
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 10
       volumes:
         - name: jenkins-data
           persistentVolumeClaim:
-            claimName: jenkins-pvc
-        - name: kubeconfig-files
-          hostPath:
-            path: C:/Users/DELL/minikube-kubeconfig   # absolute path Windows -> Pod
+            claimName: pod-jenkins-pvc
         - name: docker-sock
           hostPath:
             path: /var/run/docker.sock
+            type: Socket
+        - name: kube-certs
+          projected:
+            defaultMode: 0444  # Permissions lecture pour tous
+            sources:
+            - secret:
+                name: jenkins-kube-certs
+            - configMap:
+                name: jenkins-kubeconfig
 ---
+# --------------------------------------- 
+# Service Jenkins 
+# --------------------------------------- 
 apiVersion: v1
 kind: Service
 metadata:
@@ -63,9 +139,14 @@ metadata:
   namespace: jenkins
 spec:
   type: NodePort
+  selector:
+    app: jenkins
   ports:
     - port: 8080
       targetPort: 8080
       nodePort: 30080
-  selector:
-    app: jenkins
+      name: web
+    - port: 50000
+      targetPort: 50000
+      nodePort: 30050
+      name: agent
