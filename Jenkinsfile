@@ -30,8 +30,7 @@ pipeline {
         stage('Build Angular') {
             steps {
                 dir('angular-16-client') {
-                    sh 'npm install'
-                    sh "docker build -t ${DOCKER_IMAGE_ANGULAR} ."
+                    sh "docker build --no-cache -t ${DOCKER_IMAGE_ANGULAR} ."
                 }
             }
         }
